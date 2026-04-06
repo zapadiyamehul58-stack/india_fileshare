@@ -1,0 +1,23 @@
+{
+    "name": "flashshare-server",
+    "version": "1.0.0",
+    "description": "High-performance file sharing backend",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "mongoose": "^7.4.0",
+        "aws-sdk": "^2.1425.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "multer": "^1.4.5-lts.1",
+        "nanoid": "^4.0.2"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    }
+}
