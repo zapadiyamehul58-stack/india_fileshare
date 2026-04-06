@@ -161,6 +161,16 @@ const LiteIndex = () => {
                                                 <div className="text-2xl font-black text-slate-900">{uploadStatus.progress}%</div>
                                             </div>
 
+                                            {isP2P && uploadStatus.progress === 0 && (
+                                                <div className="px-6 py-3 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-center gap-3">
+                                                    <span className="relative flex h-2 w-2">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                                    </span>
+                                                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Waiting for Receiver to open link...</span>
+                                                </div>
+                                            )}
+
                                             {/* Advanced Progress Ring / Bar */}
                                             <div className="relative h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                                 <motion.div
@@ -174,12 +184,17 @@ const LiteIndex = () => {
                                             {/* Real-time Metrics Grid */}
                                             <div className="grid grid-cols-3 gap-4">
                                                 <div className="bg-slate-50/50 p-4 rounded-[1.5rem] border border-white text-center">
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Speed</p>
-                                                    <p className="text-lg font-black text-slate-800 tracking-tighter">{uploadStatus.speed || "0.0"} <small className="text-[10px] opacity-40">MB/S</small></p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{uploadStatus.progress > 0 ? "Speed" : "Link Status"}</p>
+                                                    <p className="text-lg font-black text-slate-800 tracking-tighter">
+                                                        {uploadStatus.progress > 0
+                                                            ? `${uploadStatus.speed || "0.0"} `
+                                                            : "READY"}
+                                                        {uploadStatus.progress > 0 && <small className="text-[10px] opacity-40">MB/S</small>}
+                                                    </p>
                                                 </div>
                                                 <div className="bg-slate-50/50 p-4 rounded-[1.5rem] border border-white text-center">
-                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Time Left</p>
-                                                    <p className="text-lg font-black text-slate-800 tracking-tighter">{uploadStatus.eta || "..."}</p>
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{uploadStatus.progress > 0 ? "Time Left" : "Handshake"}</p>
+                                                    <p className="text-lg font-black text-slate-800 tracking-tighter">{uploadStatus.progress > 0 ? (uploadStatus.eta || "...") : "NEGOTIATING"}</p>
                                                 </div>
                                                 <div className="bg-slate-50/50 p-4 rounded-[1.5rem] border border-white text-center">
                                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Health</p>

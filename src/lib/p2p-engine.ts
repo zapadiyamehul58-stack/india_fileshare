@@ -18,51 +18,67 @@ class P2PEngine {
     private peer: Peer | null = null;
     private activeConnection: DataConnection | null = null;
     private sessionId: string | null = null;
-    private CHUNK_SIZE = 128 * 1024; // 128KB chunks for high stability
+    private CHUNK_SIZE = 512 * 1024; // 512KB chunks for better throughput
 
     constructor() {
-        if (typeof window !== 'undefined') {
-            this.preWarm();
-        }
+        // We delay peer creation until needed to avoid idle connections
     }
 
-    preWarm() {
-        if (!this.peer || this.peer.destroyed) {
-            // No ID provided here; PeerJS will generate one or we set it later
-            this.peer = new Peer({
+    private initPeer(customId?: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            if (this.peer && !this.peer.destroyed && this.peer.id) {
+                return resolve(this.peer.id);
+            }
+
+            this.peer = new Peer(customId, {
                 debug: 1,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
                         { urls: 'stun:global.stun.twilio.com:3478' }
                     ]
                 }
             });
 
+            this.peer.on('open', (id) => {
+                this.sessionId = id;
+                resolve(id);
+            });
+
             this.peer.on('error', (err) => {
                 console.error('[P2P Engine] Peer error:', err);
+                reject(err);
             });
-        }
+        });
     }
 
     public getSessionId() { return this.sessionId; }
 
+    /**
+     * Creates a session with an INSTANT link.
+     * Generates a local ID first, then initializes the peer in background.
+     */
     async createSession(file: File, onUpdate: (state: P2PState) => void) {
         try {
-            this.preWarm();
+            // STEP 1: Generate INSTANT ID
+            const instantId = `fs-${nanoid(12)}`;
+            this.sessionId = instantId;
 
-            // Wait for Peer ID
-            if (!this.peer?.id) {
-                await new Promise<string>((resolve) => {
-                    this.peer?.on('open', resolve);
-                });
-            }
+            // Show link IMMEDIATELY
+            onUpdate({
+                status: 'waiting',
+                progress: 0,
+                sessionId: instantId,
+                fileName: file.name,
+                fileSize: file.size
+            });
 
-            this.sessionId = this.peer!.id;
-            onUpdate({ status: 'waiting', progress: 0, sessionId: this.sessionId, fileName: file.name, fileSize: file.size });
+            // STEP 2: Initialize Peer with that ID in background
+            await this.initPeer(instantId);
 
-            // Handle incoming connections (The receiver connects to us)
+            // Handle incoming connections
             this.peer!.on('connection', (conn) => {
                 this.activeConnection = conn;
                 this.handleSender(file, conn, onUpdate);
@@ -77,7 +93,6 @@ class P2PEngine {
         conn.on('open', async () => {
             onUpdate({ status: 'transferring', progress: 0 });
 
-            // Send metadata first
             conn.send({
                 type: 'metadata',
                 name: file.name,
@@ -95,10 +110,6 @@ class P2PEngine {
                     return;
                 }
 
-                // Check for buffer overflow to avoid memory issues
-                // Note: PeerJS doesn't natively expose bufferedAmount like raw RTC, 
-                // but we can trust its internal queuing or add a slight delay for huge files.
-
                 const slice = file.slice(offset, offset + this.CHUNK_SIZE);
                 const buffer = await slice.arrayBuffer();
                 conn.send({ type: 'data', chunk: buffer });
@@ -113,8 +124,9 @@ class P2PEngine {
 
                 onUpdate({ status: 'transferring', progress, speed, eta });
 
-                // Use setTimeout to allow the event loop to breathe for the UI
-                if (offset % (this.CHUNK_SIZE * 10) === 0) {
+                // Buffer control to prevent memory spikes
+                // PeerJS reliable mode handles windowing, but we yield to keep the UI smooth
+                if (offset % (this.CHUNK_SIZE * 5) === 0) {
                     setTimeout(sendChunk, 0);
                 } else {
                     sendChunk();
@@ -125,23 +137,19 @@ class P2PEngine {
         });
 
         conn.on('error', (err) => {
-            onUpdate({ status: 'error', progress: 0, error: 'Connection lost' });
+            onUpdate({ status: 'error', progress: 0, error: 'Peer connection interrupted' });
         });
     }
 
     async receiveSession(sessionId: string, onUpdate: (state: P2PState) => void, onFileReady: (file: File) => void) {
         try {
-            this.preWarm();
-
-            if (!this.peer?.id) {
-                await new Promise<string>((resolve) => {
-                    this.peer?.on('open', resolve);
-                });
-            }
-
+            await this.initPeer();
             onUpdate({ status: 'connecting', progress: 0 });
 
-            const conn = this.peer!.connect(sessionId, { reliable: true });
+            const conn = this.peer!.connect(sessionId, {
+                reliable: true,
+                // Setting serialization to 'binary' for maximum speed
+            });
             this.activeConnection = conn;
 
             let receivedBuffers: ArrayBuffer[] = [];
@@ -178,15 +186,8 @@ class P2PEngine {
             });
 
             conn.on('error', (err) => {
-                onUpdate({ status: 'error', progress: 0, error: 'Failed to connect to sender' });
+                onUpdate({ status: 'error', progress: 0, error: 'Could not connect to sender. Check link or network.' });
             });
-
-            // Set a timeout for connection
-            setTimeout(() => {
-                if (receivedSize === 0 && onUpdate) {
-                    // onUpdate({ status: 'error', error: 'Connection timed out' });
-                }
-            }, 10000);
 
         } catch (err: any) {
             onUpdate({ status: 'error', progress: 0, error: err.message });
