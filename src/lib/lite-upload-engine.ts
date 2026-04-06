@@ -9,11 +9,12 @@ export type LiteUploadStatus = {
     link?: string;
     error?: string;
     parallelChunks?: number;
+    fileId?: string;
 };
 
 class LiteUploadEngine {
-    private CONCURRENCY = 4; // Parallel workers for maximum throughput
-    private CHUNK_SIZE = 15 * 1024 * 1024; // 15MB Chunks (Best for browsers)
+    private CONCURRENCY = 6; // Increased to 6 workers for Mega-Parallelism
+    private CHUNK_SIZE = 10 * 1024 * 1024; // 10MB Chunks for better responsiveness
     private BUCKET = 'flashshare-files';
 
     /**
@@ -22,18 +23,22 @@ class LiteUploadEngine {
      */
     async upload(file: File, callback: (status: LiteUploadStatus) => void) {
         try {
-            const fileId = nanoid(12);
+            const fileId = nanoid(10); // Predictable short ID
             const totalChunks = Math.ceil(file.size / this.CHUNK_SIZE);
             let uploadedBytes = 0;
             let startTime = Date.now();
 
+            // INSTANT LINK: Generate and share the link before the first byte is even sent!
+            const instantLink = `${window.location.origin}/download/${fileId}?name=${encodeURIComponent(file.name)}&size=${file.size}`;
+
             callback({
-                progress: 0,
+                progress: 1, // Start at 1% for instant feedback
                 status: 'uploading',
-                parallelChunks: this.CONCURRENCY
+                parallelChunks: this.CONCURRENCY,
+                link: instantLink,
+                fileId
             });
 
-            // Simple chunk index worker pool
             let currentChunkIdx = 0;
             const uploadWorker = async () => {
                 while (currentChunkIdx < totalChunks) {
@@ -42,12 +47,11 @@ class LiteUploadEngine {
                     const end = Math.min(start + this.CHUNK_SIZE, file.size);
                     const chunk = file.slice(start, end);
 
-                    let retries = 3;
+                    let retries = 5;
                     let success = false;
 
                     while (retries > 0 && !success) {
                         try {
-                            // Upload chunk to its own path in the folder
                             const { error } = await supabase.storage
                                 .from(this.BUCKET)
                                 .upload(`${fileId}/chunk_${idx}`, chunk, {
@@ -60,11 +64,11 @@ class LiteUploadEngine {
                             success = true;
                             uploadedBytes += chunk.size;
 
-                            // Periodic progress report
                             const now = Date.now();
                             const elapsed = (now - startTime) / 1000;
                             const speed = (uploadedBytes / 1024 / 1024 / elapsed).toFixed(1);
                             const progress = Math.min(Math.round((uploadedBytes / file.size) * 100), 99);
+
                             const remainingBytes = file.size - uploadedBytes;
                             const etaSec = remainingBytes / (uploadedBytes / elapsed);
                             const eta = etaSec > 3600
@@ -75,52 +79,36 @@ class LiteUploadEngine {
 
                             callback({
                                 status: 'uploading',
-                                progress,
+                                progress: Math.max(progress, 1),
                                 speed,
                                 eta,
-                                parallelChunks: this.CONCURRENCY
+                                parallelChunks: this.CONCURRENCY,
+                                link: instantLink,
+                                fileId
                             });
                         } catch (err) {
                             retries--;
                             if (retries === 0) throw err;
-                            await new Promise(r => setTimeout(r, 1000)); // Wait 1s before retry
+                            await new Promise(r => setTimeout(r, 500)); // Quicker retry
                         }
                     }
                 }
             };
 
-            // Fire parallel workers
             const workers = Array(this.CONCURRENCY).fill(null).map(() => uploadWorker());
             await Promise.all(workers);
 
-            // Finalize: Create a metadata entry for the file link
-            // Since it's serverless, we'll use a direct public URL to the main storage if we can,
-            // but typically we'd 'assemble' or just use the folder.
-            // For this demo, we'll provide a 'Combined' download link using Supabase's signed URL if public access is off.
-
-            const { data: { publicUrl } } = supabase.storage
-                .from(this.BUCKET)
-                .getPublicUrl(`${fileId}/chunk_0`); // Simplification
-
-            // Final callback
             callback({
                 progress: 100,
                 status: 'completed',
-                link: `${window.location.origin}/download/${fileId}?name=${encodeURIComponent(file.name)}&size=${file.size}`
+                link: instantLink,
+                fileId
             });
 
         } catch (err: any) {
             console.error('[Upload Ultra Critical]:', err);
             callback({ progress: 0, status: 'error', error: err.message });
         }
-    }
-
-    /**
-     * For the "Receiver" side: Stream combined chunks without buffering first.
-     */
-    async download(fileId: string, name: string, size: number, onProgress: (p: number) => void) {
-        // Implement progressive re-assembly in browser stream
-        // This is the "Ultra" part: streaming 100GB without RAM issues.
     }
 }
 

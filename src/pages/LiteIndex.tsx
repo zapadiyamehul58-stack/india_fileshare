@@ -53,9 +53,14 @@ const LiteIndex = () => {
                 }
             });
         } else {
-            // OPTION B: NEW ULTRA PARALLEL CLOUD ENGINE
+            // OPTION B: NEW ULTRA PARALLEL CLOUD ENGINE (INSTANT LINK)
             await liteUploadEngine.upload(file, (status) => {
-                setUploadStatus(status);
+                setUploadStatus(prev => ({
+                    ...prev,
+                    ...status,
+                    // Keep the current progress or use engine progress
+                    progress: status.progress || prev.progress
+                }));
             });
         }
     };
@@ -123,13 +128,13 @@ const LiteIndex = () => {
                                         onClick={() => setIsP2P(false)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!isP2P ? 'bg-white text-blue-600 shadow-sm border border-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
-                                        <Globe className="w-3 h-3" /> Cloud Ultra
+                                        <Globe className="w-3 h-3" /> Cloud 🔥 Instant
                                     </button>
                                     <button
                                         onClick={() => setIsP2P(true)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isP2P ? 'bg-white text-blue-600 shadow-sm border border-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
-                                        <Zap className="w-3 h-3" /> Peer-to-Peer
+                                        <Zap className="w-3 h-3" /> P2P Direct
                                     </button>
                                 </div>
 
@@ -171,7 +176,7 @@ const LiteIndex = () => {
                                                     <p className="text-sm font-black text-slate-900 truncate mb-1">{fileName}</p>
                                                     <div className="flex items-center gap-2">
                                                         <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                                                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">{isP2P ? "P2P Multi-Channel Engine" : "Ultra Resumable Stream"}</span>
+                                                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">{isP2P ? "Target Handshake Mode" : "Ultra Parallel Cloud Stream"}</span>
                                                     </div>
                                                 </div>
                                                 <div className="text-2xl font-black text-slate-900">{uploadStatus.progress}%</div>
