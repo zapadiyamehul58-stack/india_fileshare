@@ -9,10 +9,22 @@ const P2PPage = () => {
     const { id } = useParams<{ id: string }>();
     const [p2pState, setP2PState] = useState<P2PState>({ status: 'connecting', progress: 0 });
     const [downloadedFile, setDownloadedFile] = useState<File | null>(null);
+    const [showRelay, setShowRelay] = useState(false);
+
+    // Extract name/size from URL if available (passed from sender)
+    const searchParams = new URLSearchParams(window.location.search);
+    const fileName = searchParams.get('name') || p2pState.fileName || 'FlashShare File';
+    const fileSize = parseInt(searchParams.get('size') || '0') || p2pState.fileSize || 0;
 
     useEffect(() => {
         if (id) {
             p2pEngine.receiveSession(id, setP2PState, setDownloadedFile);
+
+            // 2 SECOND WATCHDOG: If still connecting after 2s, offer Relay Mode
+            const timer = setTimeout(() => {
+                setShowRelay(true);
+            }, 2500); // 2.5s for grace
+            return () => clearTimeout(timer);
         }
     }, [id]);
 
@@ -67,7 +79,26 @@ const P2PPage = () => {
                                 <h2 className="text-2xl font-black text-slate-900 mb-2">Establishing Handshake</h2>
                                 <p className="text-slate-400 text-sm font-semibold mb-8 leading-relaxed">Attempting direct P2P connection tunnel...</p>
 
-                                {p2pState.fileName && (
+                                {showRelay && (
+                                    <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                                        <div className="p-3 bg-amber-50 rounded-2xl border border-amber-100/50">
+                                            <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest leading-loose">
+                                                P2P handshaking is slower than usual.<br />Switching to Global Relay...
+                                            </p>
+                                        </div>
+
+                                        <Button
+                                            variant="secondary"
+                                            className="w-full h-16 rounded-[1.5rem] bg-indigo-600 text-white font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 gap-3"
+                                            onClick={() => window.open(`https://vlruulaiaqrddjfmkafz.supabase.co/storage/v1/object/public/flashshare-files/${id}/chunk_0`, '_blank')}
+                                        >
+                                            <Globe className="w-5 h-5" /> Start Instant Download
+                                        </Button>
+                                        <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Bypassing peer handshake for ultra speed</p>
+                                    </motion.div>
+                                )}
+
+                                {fileName && !showRelay && (
                                     <div className="p-4 bg-slate-50/50 rounded-3xl border border-white flex items-center gap-4 text-left shadow-sm">
                                         <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
                                             <FileText className="w-5 h-5 text-blue-600" />
@@ -78,37 +109,6 @@ const P2PPage = () => {
                                         </div>
                                     </div>
                                 )}
-                            </motion.div>
-                        ) : p2pState.status === 'fallback' ? (
-                            <motion.div key="fallback" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-center py-4 space-y-8">
-                                <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto border border-amber-100/50 shadow-xl shadow-amber-50">
-                                    <Globe className="text-amber-600 w-10 h-10" />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-black text-slate-900 mb-1">P2P Blocked</h2>
-                                    <p className="text-slate-400 text-sm font-semibold px-4">Network topology prevents direct handshake. Switching to Ultra Secure Cloud Path.</p>
-                                </div>
-
-                                <div className="p-5 bg-blue-50/30 rounded-3xl border border-blue-100/50 flex items-center gap-4 text-left">
-                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                                        <Shield className="w-6 h-6 text-blue-600" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-black text-slate-800 truncate">{p2pState.fileName}</p>
-                                        <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-0.5 animate-pulse">Security Check Passed</p>
-                                    </div>
-                                </div>
-
-                                <Button
-                                    onClick={() => window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/download/${id}`, '_blank')}
-                                    className="w-full h-16 bg-blue-600 rounded-[1.5rem] font-black text-white hover:bg-blue-700 shadow-2xl shadow-blue-200 gap-3 text-lg transition-transform active:scale-95"
-                                >
-                                    <Download className="w-6 h-6" /> Start Ultra Download
-                                </Button>
-
-                                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] cursor-pointer hover:text-slate-500 transition-colors" onClick={() => window.location.reload()}>
-                                    Force Reset Handshake Engine
-                                </p>
                             </motion.div>
                         ) : p2pState.status === 'transferring' ? (
                             <motion.div key="transferring" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-10 py-2">

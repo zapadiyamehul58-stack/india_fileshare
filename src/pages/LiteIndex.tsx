@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { nanoid } from 'nanoid';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Upload, Copy, Check, Zap, FileText,
@@ -25,44 +26,37 @@ const LiteIndex = () => {
 
     const handleUpload = async (file: File) => {
         setFileName(file.name);
-        if (isP2P) {
-            setUploadStatus({ progress: 0, status: 'uploading' });
+        setUploadStatus({ progress: 0, status: 'uploading' });
 
-            // 1. Initialize P2P Session to get deterministic ID
-            await p2pEngine.createSession(file, (state) => {
-                setP2PState(state);
+        // 1. Unified Share ID
+        const unifiedId = `fs-${nanoid(12)}`;
+        const shareLink = `${window.location.origin}/p2p/${unifiedId}?name=${encodeURIComponent(file.name)}&size=${file.size}`;
 
-                // Show completion or error from P2P track
-                if (state.status === 'completed') {
-                    setUploadStatus({
-                        progress: 100,
-                        status: 'completed',
-                        link: `${window.location.origin}/p2p/${state.sessionId}`
-                    });
-                } else if (state.status === 'error') {
-                    setUploadStatus({ progress: 0, status: 'error', error: state.error });
-                } else if (state.status === 'waiting' || state.status === 'transferring') {
-                    setUploadStatus(prev => ({
-                        ...prev,
-                        progress: state.progress || prev.progress,
-                        status: 'uploading',
-                        link: state.sessionId ? `${window.location.origin}/p2p/${state.sessionId}` : undefined,
-                        speed: state.speed,
-                        eta: state.eta
-                    }));
-                }
-            });
-        } else {
-            // OPTION B: NEW ULTRA PARALLEL CLOUD ENGINE (INSTANT LINK)
-            await liteUploadEngine.upload(file, (status) => {
+        // 2. Start P2P Engine (Direct Handshake)
+        p2pEngine.createSession(file, (state) => {
+            setP2PState(state);
+            if (state.status === 'completed') {
+                setUploadStatus({ progress: 100, status: 'completed', link: shareLink });
+            } else if (state.status === 'transferring') {
                 setUploadStatus(prev => ({
                     ...prev,
-                    ...status,
-                    // Keep the current progress or use engine progress
-                    progress: status.progress || prev.progress
+                    progress: state.progress,
+                    speed: state.speed,
+                    eta: state.eta,
+                    isHybrid: true
                 }));
-            });
-        }
+            }
+        });
+
+        // 3. Start Cloud Engine (Relay Path)
+        liteUploadEngine.upload(file, (status) => {
+            setUploadStatus(prev => ({
+                ...prev,
+                ...status,
+                link: shareLink,
+                progress: Math.max(prev.progress, status.progress)
+            }));
+        });
     };
 
     const copyToClipboard = () => {
