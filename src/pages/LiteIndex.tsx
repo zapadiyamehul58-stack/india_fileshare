@@ -6,12 +6,13 @@ import {
     Send, QrCode, Download
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { liteUploadEngine, LiteUploadStatus } from '@/lib/lite-upload-engine';
 import { p2pEngine, P2PState } from '@/lib/p2p-engine';
 import { toast } from 'sonner';
 
 const LiteIndex = () => {
     const [uploadStatus, setUploadStatus] = useState<any>({ progress: 0, status: 'idle' });
-    const [isP2P, setIsP2P] = useState(true);
+    const [isP2P, setIsP2P] = useState(false);
     const [p2pState, setP2PState] = useState<P2PState>({ status: 'idle', progress: 0 });
     const [copied, setCopied] = useState(false);
     const [fileName, setFileName] = useState<string | null>(null);
@@ -19,7 +20,7 @@ const LiteIndex = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        p2pEngine.preWarm();
+        // Peer initialized on demand
     }, []);
 
     const handleUpload = async (file: File) => {
@@ -50,6 +51,11 @@ const LiteIndex = () => {
                         eta: state.eta
                     }));
                 }
+            });
+        } else {
+            // OPTION B: NEW ULTRA PARALLEL CLOUD ENGINE
+            await liteUploadEngine.upload(file, (status) => {
+                setUploadStatus(status);
             });
         }
     };
@@ -112,9 +118,19 @@ const LiteIndex = () => {
                         {uploadStatus.status === 'idle' ? (
                             <motion.div key="idle" exit={{ opacity: 0, scale: 0.95 }} className="p-8">
                                 {/* Mode Selector */}
-                                <div className="flex bg-blue-50/50 p-3 rounded-2xl border border-blue-100 mb-8 backdrop-blur-sm justify-center items-center gap-2">
-                                    <Zap className="w-4 h-4 text-blue-600 fill-blue-600/20" />
-                                    <span className="text-[11px] font-black text-blue-600 uppercase tracking-widest italic">Global Peer-to-Peer Mode Active</span>
+                                <div className="flex bg-slate-50/80 p-1.5 rounded-2xl border border-slate-100 mb-8 backdrop-blur-sm">
+                                    <button
+                                        onClick={() => setIsP2P(false)}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!isP2P ? 'bg-white text-blue-600 shadow-sm border border-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <Globe className="w-3 h-3" /> Cloud Ultra
+                                    </button>
+                                    <button
+                                        onClick={() => setIsP2P(true)}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isP2P ? 'bg-white text-blue-600 shadow-sm border border-blue-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <Zap className="w-3 h-3" /> Peer-to-Peer
+                                    </button>
                                 </div>
 
                                 {/* Drop Zone */}
